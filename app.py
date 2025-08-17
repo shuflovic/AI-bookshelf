@@ -37,8 +37,8 @@ def initialize_llm():
         try:
             print("🤖 Using Google Gemini")
             llm = ChatGoogleGenerativeAI(
-                model_name="gemini-2.5-flash",  # Updated to latest model
-                google_api_key=google_key,
+                model="gemini-1.5-flash",  # Using supported model
+                api_key=google_key,
                 temperature=0.7
             )
             return llm
