@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            min-height: 100vh;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #f2f2f2;
+            padding: 20px;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+        }
+        .sidebar h2 {
+            font-size: 18px;
+            margin-top: 0;
+        }
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+        }
+        .sidebar li {
+            margin: 10px 0;
+        }
+        .sidebar a {
+            text-decoration: none;
+            color: #333;
+            cursor: pointer;
+        }
+        .sidebar a:hover {
+            text-decoration: underline;
+        }
+        .main-content {
+            flex-grow: 1;
+            padding: 20px;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        input[type="text"] {
+            padding: 10px;
+            width: 300px;
+            margin-right: 10px;
+        }
+        #status {
+            margin-top: 10px;
+            color: #333;
+        }
+        #research-content {
+            margin-top: 20px;
+        }
+        #research-content h3 {
+            margin-top: 0;
+        }
+        .source-list, .tool-list {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>Research Topics</h2>
+        <ul id="topic-list"></ul>
+        <button onclick="clearAll()">Clear History</button>
+    </div>
+    <div class="main-content">
+        <h1>Research Assistant</h1>
+        <div class="controls">
+            <input type="text" id="query" placeholder="Enter research topic">
+            <button onclick="runResearch()">Research</button>
+        </div>
+        <div id="status"></div>
+        <div id="research-content"></div>
+    </div>
+
+    <script>
+        async function loadTopics() {
+            try {
+                const response = await fetch('/data.csv');
+                if (!response.ok) {
+                    throw new Error('Failed to load CSV file');
+                }
+                const data = await response.text();
+                const rows = data.split('\n').filter(row => row.trim() !== '');
+                const topicList = document.getElementById('topic-list');
+                topicList.innerHTML = '';
+                
+                const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
+                
+                for (let i = startIndex; i < rows.length; i++) {
+                    const cols = rows[i].split(',');
+                    if (cols.length >= 4) {
+                        const topic = cols[0];
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            <a onclick="showTopic('${topic}')">${topic}</a>
+                            <button onclick="clearTopic('${topic}')">Clear</button>
+                        `;
+                        topicList.appendChild(li);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading topics:', error);
+                document.getElementById('topic-list').innerHTML = '<li>No topics available</li>';
+            }
+        }
+
+        async function showTopic(topic) {
+            try {
+                const response = await fetch('/data.csv');
+                if (!response.ok) {
+                    throw new Error('Failed to load CSV file');
+                }
+                const data = await response.text();
+                const rows = data.split('\n').filter(row => row.trim() !== '');
+                const contentDiv = document.getElementById('research-content');
+                
+                const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
+                
+                for (let i = startIndex; i < rows.length; i++) {
+                    const cols = rows[i].split(',');
+                    if (cols.length >= 4 && cols[0] === topic) {
+                        const summary = cols[1];
+                        const sources = cols[2].split(';').filter(s => s);
+                        const tools = cols[3].split(';').filter(t => t);
+                        contentDiv.innerHTML = `
+                            <h3>${topic}</h3>
+                            <p><strong>Summary:</strong> ${summary}</p>
+                            <p><strong>Sources:</strong></p>
+                            <ul class="source-list">
+                                ${sources.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                            <p><strong>Tools Used:</strong></p>
+                            <ul class="tool-list">
+                                ${tools.map(t => `<li>${t}</li>`).join('')}
+                            </ul>
+                        `;
+                        return;
+                    }
+                }
+                contentDiv.innerHTML = '<p>Topic not found</p>';
+            } catch (error) {
+                console.error('Error loading topic:', error);
+                document.getElementById('research-content').innerHTML = '<p>Error loading topic</p>';
+            }
+        }
+
+        async function runResearch() {
+            const query = document.getElementById('query').value.trim();
+            if (!query) {
+                document.getElementById('status').innerText = 'Please enter a research query';
+                return;
+            }
+            document.getElementById('status').innerText = 'Researching...';
+            try {
+                const response = await fetch('/research', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const result = await response.json();
+                if (result.error) {
+                    document.getElementById('status').innerText = result.error;
+                } else {
+                    document.getElementById('status').innerText = result.status;
+                    loadTopics(); // Refresh topic list
+                    showTopic(result.topic); // Show new research
+                }
+            } catch (error) {
+                document.getElementById('status').innerText = 'Error running research';
+                console.error('Error:', error);
+            }
+        }
+
+        async function clearAll() {
+            try {
+                const response = await fetch('/clear', { method: 'POST' });
+                const result = await response.json();
+                document.getElementById('status').innerText = result.status;
+                loadTopics();
+                document.getElementById('research-content').innerHTML = '';
+            } catch (error) {
+                document.getElementById('status').innerText = 'Error clearing data';
+                console.error('Error:', error);
+            }
+        }
+
+        async function clearTopic(topic) {
+            try {
+                const response = await fetch(`/clear/${encodeURIComponent(topic)}`, { method: 'POST' });
+                const result = await response.json();
+                document.getElementById('status').innerText = result.status;
+                loadTopics();
+                document.getElementById('research-content').innerHTML = '';
+            } catch (error) {
+                document.getElementById('status').innerText = 'Error clearing topic';
+                console.error('Error:', error);
+            }
+        }
+
+        // Load topics initially and refresh every 10 seconds
+        window.onload = function() {
+            loadTopics();
+            setInterval(loadTopics, 10000);
+        };
+    </script>
+</body>
+</html>
