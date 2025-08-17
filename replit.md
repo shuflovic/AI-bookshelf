@@ -8,6 +8,14 @@ This is an AI-powered research assistant application that enables users to condu
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+**August 17, 2025:**
+- Successfully implemented Flask-based AI research assistant with Google Gemini integration
+- Fixed LLM initialization issues and API parameter configuration
+- Confirmed all functionality working: web interface, AI research, data persistence, CSV export
+- User testing phase initiated with fully operational system
+
 ## System Architecture
 
 ### Backend Architecture
