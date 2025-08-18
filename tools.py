@@ -200,25 +200,71 @@ __all__ = ['search_tool', 'wiki_tool', 'save_tool']
 
 
 def website_tool(url):
-    """Fetch and summarize text content from a specific website URL"""
+    """Fetch and analyze complete content from a specific website URL"""
     try:
-        # Send HTTP request to the URL
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise exception for bad status codes
+        # Send HTTP request to the URL with proper headers
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, timeout=15, headers=headers)
+        response.raise_for_status()
 
         # Parse HTML content
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Extract text from paragraphs, headings, and articles
-        text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'article'])
-        text = ' '.join(element.get_text(strip=True) for element in text_elements)
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
 
-        # Limit text to avoid overwhelming the LLM
-        text = text[:5000]  # Truncate to 5000 characters
-        if not text:
-            return f"No relevant content found on {url}"
+        # Extract different types of content
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else "No title found"
+        
+        # Get meta description
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        description = meta_desc.get('content', '') if meta_desc else ''
+        
+        # Extract main content areas
+        content_selectors = [
+            'main', 'article', '.content', '.post', '.entry', 
+            '.blog-post', '.post-content', '#content', '.main-content'
+        ]
+        
+        main_content = ""
+        for selector in content_selectors:
+            content_area = soup.select_one(selector)
+            if content_area:
+                main_content = content_area.get_text(strip=True, separator=' ')
+                break
+        
+        # If no specific content area found, get all text
+        if not main_content:
+            # Extract text from paragraphs, headings, and articles
+            text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article', 'section', 'div'])
+            main_content = ' '.join(element.get_text(strip=True) for element in text_elements if element.get_text(strip=True))
 
-        return f"Content from {url}:\n{text}"
+        # Get all links for additional context
+        links = [a.get('href') for a in soup.find_all('a', href=True)]
+        internal_links = [link for link in links if link and (url in link or link.startswith('/') or not link.startswith('http'))]
+        
+        # Increase content limit for better analysis
+        full_content = f"""
+TITLE: {title_text}
+
+DESCRIPTION: {description}
+
+MAIN CONTENT:
+{main_content[:15000]}
+
+INTERNAL LINKS FOUND: {len(internal_links)} links
+SAMPLE LINKS: {internal_links[:10] if internal_links else 'None found'}
+"""
+        
+        if not main_content.strip():
+            return f"No readable content found on {url}. The page might be JavaScript-heavy or have restricted access."
+
+        return f"Complete analysis of {url}:\n{full_content}"
+        
     except Exception as e:
         return f"Error fetching content from {url}: {str(e)}"
 
