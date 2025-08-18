@@ -1140,6 +1140,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "anthropic" },
+    { name = "beautifulsoup4" },
     { name = "duckduckgo-search" },
     { name = "email-validator" },
     { name = "flask" },
@@ -1153,12 +1154,14 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "pydantic" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "wikipedia" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anthropic", specifier = ">=0.64.0" },
+    { name = "beautifulsoup4", specifier = ">=4.13.4" },
     { name = "duckduckgo-search", specifier = ">=8.1.1" },
     { name = "email-validator", specifier = ">=2.2.0" },
     { name = "flask", specifier = ">=3.1.1" },
@@ -1172,6 +1175,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
+    { name = "requests", specifier = ">=2.32.4" },
     { name = "wikipedia", specifier = ">=1.4.0" },
 ]
 

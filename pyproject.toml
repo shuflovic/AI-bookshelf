@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.64.0",
+    "beautifulsoup4>=4.13.4",
     "duckduckgo-search>=8.1.1",
     "email-validator>=2.2.0",
     "flask>=3.1.1",
@@ -18,5 +19,6 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "pydantic>=2.11.7",
     "python-dotenv>=1.1.1",
+    "requests>=2.32.4",
     "wikipedia>=1.4.0",
 ]
