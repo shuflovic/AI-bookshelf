@@ -5,6 +5,9 @@ from typing import Type
 from langchain.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
 from pydantic import BaseModel, Field
+from langchain.tools import Tool
+import requests
+from bs4 import BeautifulSoup
 try:
     from duckduckgo_search import DDGS
 except ImportError:
@@ -192,3 +195,35 @@ save_tool = SaveTextTool()
 
 # Export tools for use in the main application
 __all__ = ['search_tool', 'wiki_tool', 'save_tool']
+
+
+
+
+def website_tool(url):
+    """Fetch and summarize text content from a specific website URL"""
+    try:
+        # Send HTTP request to the URL
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise exception for bad status codes
+
+        # Parse HTML content
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Extract text from paragraphs, headings, and articles
+        text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'article'])
+        text = ' '.join(element.get_text(strip=True) for element in text_elements)
+
+        # Limit text to avoid overwhelming the LLM
+        text = text[:5000]  # Truncate to 5000 characters
+        if not text:
+            return f"No relevant content found on {url}"
+
+        return f"Content from {url}:\n{text}"
+    except Exception as e:
+        return f"Error fetching content from {url}: {str(e)}"
+
+website_tool = Tool(
+    name="website",
+    func=website_tool,
+    description="Fetches and summarizes text content from a specific website URL. Provide the full URL (e.g., https://example.com)."
+)

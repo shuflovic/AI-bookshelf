@@ -10,17 +10,19 @@
             margin: 0;
             display: flex;
             min-height: 100vh;
+            background-color: #f5f5f5;
         }
         .sidebar {
             width: 250px;
-            background-color: #f2f2f2;
+            background-color: #e8ecef;
             padding: 20px;
-            border-right: 1px solid #ddd;
+            border-right: 1px solid #ccc;
             overflow-y: auto;
         }
         .sidebar h2 {
             font-size: 18px;
-            margin-top: 0;
+            margin: 0 0 15px;
+            color: #333;
         }
         .sidebar ul {
             list-style: none;
@@ -28,10 +30,13 @@
         }
         .sidebar li {
             margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
         .sidebar a {
             text-decoration: none;
-            color: #333;
+            color: #007bff;
             cursor: pointer;
         }
         .sidebar a:hover {
@@ -40,33 +45,58 @@
         .main-content {
             flex-grow: 1;
             padding: 20px;
+            max-width: 800px;
         }
         .controls {
             margin-bottom: 20px;
         }
-        button {
-            padding: 10px 20px;
-            margin-right: 10px;
-            cursor: pointer;
-        }
         input[type="text"] {
             padding: 10px;
             width: 300px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
             margin-right: 10px;
         }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .sidebar button {
+            background-color: #dc3545;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .sidebar button:hover {
+            background-color: #c82333;
+        }
         #status {
-            margin-top: 10px;
+            margin: 10px 0;
             color: #333;
+            font-style: italic;
         }
         #research-content {
-            margin-top: 20px;
+            background-color: white;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         #research-content h3 {
             margin-top: 0;
+            color: #333;
         }
         .source-list, .tool-list {
             margin: 10px 0;
             padding-left: 20px;
+        }
+        .source-list li, .tool-list li {
+            margin: 5px 0;
         }
     </style>
 </head>
@@ -80,6 +110,7 @@
         <h1>Research Assistant</h1>
         <div class="controls">
             <input type="text" id="query" placeholder="Enter research topic">
+            <input type="text" id="website" placeholder="Enter website URL (optional)">
             <button onclick="runResearch()">Research</button>
         </div>
         <div id="status"></div>
@@ -87,6 +118,25 @@
     </div>
 
     <script>
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current);
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current);
+            return result;
+        }
+
         async function loadTopics() {
             try {
                 const response = await fetch('/data.csv');
@@ -101,13 +151,13 @@
                 const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
                 
                 for (let i = startIndex; i < rows.length; i++) {
-                    const cols = rows[i].split(',');
+                    const cols = parseCSVLine(rows[i]);
                     if (cols.length >= 4) {
                         const topic = cols[0];
                         const li = document.createElement('li');
                         li.innerHTML = `
-                            <a onclick="showTopic('${topic}')">${topic}</a>
-                            <button onclick="clearTopic('${topic}')">Clear</button>
+                            <a onclick="showTopic('${encodeURIComponent(topic)}')">${topic}</a>
+                            <button onclick="clearTopic('${encodeURIComponent(topic)}')">Clear</button>
                         `;
                         topicList.appendChild(li);
                     }
@@ -118,7 +168,8 @@
             }
         }
 
-        async function showTopic(topic) {
+        async function showTopic(encodedTopic) {
+            const topic = decodeURIComponent(encodedTopic);
             try {
                 const response = await fetch('/data.csv');
                 if (!response.ok) {
@@ -131,7 +182,7 @@
                 const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
                 
                 for (let i = startIndex; i < rows.length; i++) {
-                    const cols = rows[i].split(',');
+                    const cols = parseCSVLine(rows[i]);
                     if (cols.length >= 4 && cols[0] === topic) {
                         const summary = cols[1];
                         const sources = cols[2].split(';').filter(s => s);
@@ -160,6 +211,7 @@
 
         async function runResearch() {
             const query = document.getElementById('query').value.trim();
+            const website = document.getElementById('website').value.trim();
             if (!query) {
                 document.getElementById('status').innerText = 'Please enter a research query';
                 return;
@@ -169,15 +221,15 @@
                 const response = await fetch('/research', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
+                    body: JSON.stringify({ query, website })
                 });
                 const result = await response.json();
                 if (result.error) {
                     document.getElementById('status').innerText = result.error;
                 } else {
                     document.getElementById('status').innerText = result.status;
-                    loadTopics(); // Refresh topic list
-                    showTopic(result.topic); // Show new research
+                    loadTopics();
+                    showTopic(encodeURIComponent(result.topic));
                 }
             } catch (error) {
                 document.getElementById('status').innerText = 'Error running research';
@@ -198,7 +250,8 @@
             }
         }
 
-        async function clearTopic(topic) {
+        async function clearTopic(encodedTopic) {
+            const topic = decodeURIComponent(encodedTopic);
             try {
                 const response = await fetch(`/clear/${encodeURIComponent(topic)}`, { method: 'POST' });
                 const result = await response.json();
@@ -211,7 +264,6 @@
             }
         }
 
-        // Load topics initially and refresh every 10 seconds
         window.onload = function() {
             loadTopics();
             setInterval(loadTopics, 10000);
