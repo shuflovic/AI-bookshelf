@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Research Assistant</title>
+    <title>Book Search</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -51,22 +51,28 @@
             margin-bottom: 20px;
         }
         input[type="text"] {
-            padding: 10px;
-            width: 300px;
+            padding: 15px;
+            width: 400px;
             border: 1px solid #ccc;
-            border-radius: 4px;
+            border-radius: 8px;
             margin-right: 10px;
+            font-size: 16px;
         }
         button {
-            padding: 10px 20px;
+            padding: 15px 25px;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             background-color: #007bff;
             color: white;
             cursor: pointer;
+            font-size: 16px;
         }
         button:hover {
             background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
         }
         .sidebar button {
             background-color: #dc3545;
@@ -77,44 +83,73 @@
             background-color: #c82333;
         }
         #status {
-            margin: 10px 0;
+            margin: 15px 0;
             color: #333;
             font-style: italic;
+            font-size: 14px;
         }
-        #research-content {
+        #book-result {
             background-color: white;
-            padding: 20px;
-            border-radius: 4px;
+            padding: 25px;
+            border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-top: 20px;
         }
-        #research-content h3 {
+        #book-result h3 {
             margin-top: 0;
             color: #333;
+            font-size: 24px;
+            margin-bottom: 15px;
         }
-        .source-list, .tool-list {
-            margin: 10px 0;
-            padding-left: 20px;
+        .book-info {
+            margin: 15px 0;
+            font-size: 16px;
         }
-        .source-list li, .tool-list li {
-            margin: 5px 0;
+        .book-info strong {
+            color: #555;
+            display: inline-block;
+            width: 150px;
+        }
+        .book-info span {
+            color: #333;
+        }
+        .search-instruction {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .search-instruction h4 {
+            margin: 0 0 10px;
+            color: #1976d2;
+        }
+        .search-instruction p {
+            margin: 0;
+            color: #555;
         }
     </style>
 </head>
 <body>
     <div class="sidebar">
-        <h2>Research Topics</h2>
-        <ul id="topic-list"></ul>
+        <h2>Search History</h2>
+        <ul id="search-list"></ul>
         <button onclick="clearAll()">Clear History</button>
     </div>
     <div class="main-content">
-        <h1>Research Assistant</h1>
+        <h1>📚 Book Search</h1>
+        
+        <div class="search-instruction">
+            <h4>How to use:</h4>
+            <p>Enter a book title, author name, or description in the search box below. The system will find the book's title, author, and first year of publication.</p>
+        </div>
+        
         <div class="controls">
-            <input type="text" id="query" placeholder="Enter research topic">
-            <input type="text" id="website" placeholder="Enter website URL (optional)">
-            <button onclick="runResearch()">Research</button>
+            <input type="text" id="query" placeholder="Search for a book (e.g., 'Norwegian Wood', 'Haruki Murakami', 'dystopian novel 1984')">
+            <button id="searchBtn" onclick="searchBook()">Search Book</button>
         </div>
         <div id="status"></div>
-        <div id="research-content"></div>
+        <div id="book-result" style="display: none;"></div>
     </div>
 
     <script>
@@ -137,7 +172,7 @@
             return result;
         }
 
-        async function loadTopics() {
+        async function loadSearchHistory() {
             try {
                 const response = await fetch('/data.csv');
                 if (!response.ok) {
@@ -145,31 +180,35 @@
                 }
                 const data = await response.text();
                 const rows = data.split('\n').filter(row => row.trim() !== '');
-                const topicList = document.getElementById('topic-list');
-                topicList.innerHTML = '';
+                const searchList = document.getElementById('search-list');
+                searchList.innerHTML = '';
                 
-                const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
+                const startIndex = rows[0] && rows[0].includes('search_query,title,author,first_year_published') ? 1 : 0;
                 
                 for (let i = startIndex; i < rows.length; i++) {
                     const cols = parseCSVLine(rows[i]);
                     if (cols.length >= 4) {
-                        const topic = cols[0];
+                        const searchQuery = cols[0];
                         const li = document.createElement('li');
                         li.innerHTML = `
-                            <a onclick="showTopic('${encodeURIComponent(topic)}')">${topic}</a>
-                            <button onclick="clearTopic('${encodeURIComponent(topic)}')">Clear</button>
+                            <a onclick="showBookResult('${encodeURIComponent(searchQuery)}')">${searchQuery}</a>
+                            <button onclick="clearSearch('${encodeURIComponent(searchQuery)}')">Clear</button>
                         `;
-                        topicList.appendChild(li);
+                        searchList.appendChild(li);
                     }
                 }
+                
+                if (searchList.children.length === 0) {
+                    searchList.innerHTML = '<li style="color: #666; font-style: italic;">No searches yet</li>';
+                }
             } catch (error) {
-                console.error('Error loading topics:', error);
-                document.getElementById('topic-list').innerHTML = '<li>No topics available</li>';
+                console.error('Error loading search history:', error);
+                document.getElementById('search-list').innerHTML = '<li style="color: #666;">No history available</li>';
             }
         }
 
-        async function showTopic(encodedTopic) {
-            const topic = decodeURIComponent(encodedTopic);
+        async function showBookResult(encodedQuery) {
+            const query = decodeURIComponent(encodedQuery);
             try {
                 const response = await fetch('/data.csv');
                 if (!response.ok) {
@@ -177,63 +216,83 @@
                 }
                 const data = await response.text();
                 const rows = data.split('\n').filter(row => row.trim() !== '');
-                const contentDiv = document.getElementById('research-content');
+                const resultDiv = document.getElementById('book-result');
                 
-                const startIndex = rows[0].includes('topic,summary,sources,tools_used') ? 1 : 0;
+                const startIndex = rows[0] && rows[0].includes('search_query,title,author,first_year_published') ? 1 : 0;
                 
                 for (let i = startIndex; i < rows.length; i++) {
                     const cols = parseCSVLine(rows[i]);
-                    if (cols.length >= 4 && cols[0] === topic) {
-                        const summary = cols[1];
-                        const sources = cols[2].split(';').filter(s => s);
-                        const tools = cols[3].split(';').filter(t => t);
-                        contentDiv.innerHTML = `
-                            <h3>${topic}</h3>
-                            <p><strong>Summary:</strong> ${summary}</p>
-                            <p><strong>Sources:</strong></p>
-                            <ul class="source-list">
-                                ${sources.map(s => `<li>${s}</li>`).join('')}
-                            </ul>
-                            <p><strong>Tools Used:</strong></p>
-                            <ul class="tool-list">
-                                ${tools.map(t => `<li>${t}</li>`).join('')}
-                            </ul>
+                    if (cols.length >= 4 && cols[0] === query) {
+                        const title = cols[1];
+                        const author = cols[2];
+                        const year = cols[3];
+                        
+                        resultDiv.innerHTML = `
+                            <h3>📖 Book Found</h3>
+                            <div class="book-info"><strong>Title:</strong> <span>${title}</span></div>
+                            <div class="book-info"><strong>Author:</strong> <span>${author}</span></div>
+                            <div class="book-info"><strong>First Published:</strong> <span>${year}</span></div>
                         `;
+                        resultDiv.style.display = 'block';
                         return;
                     }
                 }
-                contentDiv.innerHTML = '<p>Topic not found</p>';
+                resultDiv.innerHTML = '<p>Book information not found</p>';
+                resultDiv.style.display = 'block';
             } catch (error) {
-                console.error('Error loading topic:', error);
-                document.getElementById('research-content').innerHTML = '<p>Error loading topic</p>';
+                console.error('Error loading book result:', error);
+                document.getElementById('book-result').innerHTML = '<p>Error loading book information</p>';
             }
         }
 
-        async function runResearch() {
+        async function searchBook() {
             const query = document.getElementById('query').value.trim();
-            const website = document.getElementById('website').value.trim();
             if (!query) {
-                document.getElementById('status').innerText = 'Please enter a research query';
+                document.getElementById('status').innerText = 'Please enter a search term';
                 return;
             }
-            document.getElementById('status').innerText = 'Researching...';
+            
+            const searchBtn = document.getElementById('searchBtn');
+            const status = document.getElementById('status');
+            
+            searchBtn.disabled = true;
+            searchBtn.innerText = 'Searching...';
+            status.innerText = 'Searching for book information...';
+            document.getElementById('book-result').style.display = 'none';
+            
             try {
-                const response = await fetch('/research', {
+                const response = await fetch('/search-book', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query, website })
+                    body: JSON.stringify({ query })
                 });
                 const result = await response.json();
+                
                 if (result.error) {
-                    document.getElementById('status').innerText = result.error;
+                    status.innerText = 'Error: ' + result.error;
                 } else {
-                    document.getElementById('status').innerText = result.status;
-                    loadTopics();
-                    showTopic(encodeURIComponent(result.topic));
+                    status.innerText = result.status;
+                    
+                    // Display the book result
+                    const resultDiv = document.getElementById('book-result');
+                    resultDiv.innerHTML = `
+                        <h3>📖 Book Found</h3>
+                        <div class="book-info"><strong>Title:</strong> <span>${result.title}</span></div>
+                        <div class="book-info"><strong>Author:</strong> <span>${result.author}</span></div>
+                        <div class="book-info"><strong>First Published:</strong> <span>${result.first_year_published}</span></div>
+                    `;
+                    resultDiv.style.display = 'block';
+                    
+                    // Reload search history and clear the input
+                    loadSearchHistory();
+                    document.getElementById('query').value = '';
                 }
             } catch (error) {
-                document.getElementById('status').innerText = 'Error running research';
+                status.innerText = 'Error performing search';
                 console.error('Error:', error);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerText = 'Search Book';
             }
         }
 
@@ -242,31 +301,38 @@
                 const response = await fetch('/clear', { method: 'POST' });
                 const result = await response.json();
                 document.getElementById('status').innerText = result.status;
-                loadTopics();
-                document.getElementById('research-content').innerHTML = '';
+                loadSearchHistory();
+                document.getElementById('book-result').style.display = 'none';
             } catch (error) {
                 document.getElementById('status').innerText = 'Error clearing data';
                 console.error('Error:', error);
             }
         }
 
-        async function clearTopic(encodedTopic) {
-            const topic = decodeURIComponent(encodedTopic);
+        async function clearSearch(encodedQuery) {
+            const query = decodeURIComponent(encodedQuery);
             try {
-                const response = await fetch(`/clear/${encodeURIComponent(topic)}`, { method: 'POST' });
+                const response = await fetch(`/clear/${encodeURIComponent(query)}`, { method: 'POST' });
                 const result = await response.json();
                 document.getElementById('status').innerText = result.status;
-                loadTopics();
-                document.getElementById('research-content').innerHTML = '';
+                loadSearchHistory();
+                document.getElementById('book-result').style.display = 'none';
             } catch (error) {
-                document.getElementById('status').innerText = 'Error clearing topic';
+                document.getElementById('status').innerText = 'Error clearing search';
                 console.error('Error:', error);
             }
         }
 
+        // Allow pressing Enter to search
+        document.getElementById('query').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                searchBook();
+            }
+        });
+
         window.onload = function() {
-            loadTopics();
-            setInterval(loadTopics, 10000);
+            loadSearchHistory();
+            setInterval(loadSearchHistory, 30000); // Refresh every 30 seconds instead of 10
         };
     </script>
 </body>
