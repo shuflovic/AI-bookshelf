@@ -2,6 +2,7 @@ import os
 import csv
 import logging
 from flask import Flask, send_file, jsonify, request
+from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from langchain_anthropic import ChatAnthropic
@@ -147,7 +148,7 @@ def serve_csv():
 
 @app.route('/search-book', methods=['POST'])
 def search_book():
-    """Execute book search using the AI agent"""
+    """Execute book search using the AI agent - handles single or multiple books"""
     if not agent_executor:
         logging.error("Book search agent not initialized")
         return jsonify({"error": "Book search agent not initialized. Please check your API keys."}), 500
@@ -158,32 +159,52 @@ def search_book():
         logging.warning("No query provided in request")
         return jsonify({"error": "No query provided"}), 400
 
-    try:
-        logging.debug(f"Starting book search for query: {query}")
-        raw_response = agent_executor.invoke({"query": f"Find information about the book: {query}"})
-        logging.debug(f"Agent response: {raw_response}")
+    # Handle multiple books separated by newlines
+    queries = [q.strip() for q in query.split('\n') if q.strip()]
+    
+    results = []
+    for book_query in queries:
+        try:
+            logging.debug(f"Starting book search for query: {book_query}")
+            raw_response = agent_executor.invoke({"query": f"Find information about the book: {book_query}"})
+            logging.debug(f"Agent response: {raw_response}")
 
-        if 'output' in raw_response and raw_response['output']:
-            try:
-                structured_response = parser.parse(raw_response['output'])
-                save_to_csv(structured_response)
-                logging.info(f"Book search completed for: {structured_response.title}")
-                return jsonify({
-                    "status": "Book search completed successfully",
-                    "title": structured_response.title,
-                    "author": structured_response.author,
-                    "first_year_published": structured_response.first_year_published,
-                    "search_query": structured_response.search_query
+            if 'output' in raw_response and raw_response['output']:
+                try:
+                    structured_response = parser.parse(raw_response['output'])
+                    structured_response.search_query = book_query  # Ensure correct query is saved
+                    save_to_csv(structured_response)
+                    logging.info(f"Book search completed for: {structured_response.title}")
+                    results.append({
+                        "title": structured_response.title,
+                        "author": structured_response.author,
+                        "first_year_published": structured_response.first_year_published,
+                        "search_query": structured_response.search_query
+                    })
+                except Exception as parse_error:
+                    logging.error(f"Error parsing response: {parse_error}")
+                    results.append({
+                        "error": f"Failed to parse: {book_query}",
+                        "search_query": book_query
+                    })
+            else:
+                logging.error("No structured output received from agent")
+                results.append({
+                    "error": "No results found",
+                    "search_query": book_query
                 })
-            except Exception as parse_error:
-                logging.error(f"Error parsing response: {parse_error}")
-                return jsonify({"error": f"Failed to parse book search results: {str(parse_error)}"}), 500
-        else:
-            logging.error("No structured output received from agent")
-            return jsonify({"error": "No structured output received from book search agent"}), 500
-    except Exception as e:
-        logging.error(f"Book search failed: {e}")
-        return jsonify({"error": f"Book search failed: {str(e)}"}), 500
+        except Exception as e:
+            logging.error(f"Book search failed for {book_query}: {e}")
+            results.append({
+                "error": f"Search failed: {str(e)}",
+                "search_query": book_query
+            })
+    
+    return jsonify({
+        "status": f"Book search completed for {len(queries)} book(s)",
+        "results": results,
+        "total_searched": len(queries)
+    })
 
 @app.route('/clear', methods=['POST'])
 def clear_all():
@@ -196,6 +217,70 @@ def clear_all():
     except Exception as e:
         logging.error(f"Error clearing data: {e}")
         return jsonify({"error": f"Failed to clear data: {str(e)}"}), 500
+
+@app.route('/analyze-file', methods=['POST'])
+def analyze_file():
+    """Analyze uploaded text file for book information"""
+    if not agent_executor:
+        logging.error("Book search agent not initialized")
+        return jsonify({"error": "Book search agent not initialized. Please check your API keys."}), 500
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+        
+    if not file.filename.endswith('.txt'):
+        return jsonify({"error": "Only .txt files are supported"}), 400
+
+    try:
+        # Save file temporarily
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join('/tmp', filename)
+        file.save(temp_path)
+        
+        # Read and analyze the file content
+        with open(temp_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        # Clean up the temporary file immediately
+        os.remove(temp_path)
+        
+        # Extract potential book information from content
+        logging.debug(f"Analyzing file content: {content[:200]}...")
+        raw_response = agent_executor.invoke({
+            "query": f"Analyze this text and extract all book information (title, author, year). Find multiple books if present: {content[:3000]}"
+        })
+        
+        if 'output' in raw_response and raw_response['output']:
+            try:
+                structured_response = parser.parse(raw_response['output'])
+                structured_response.search_query = f"File: {filename}"
+                save_to_csv(structured_response)
+                logging.info(f"File analysis completed: {structured_response.title}")
+                return jsonify({
+                    "status": "File analysis completed successfully",
+                    "filename": filename,
+                    "title": structured_response.title,
+                    "author": structured_response.author,
+                    "first_year_published": structured_response.first_year_published,
+                    "search_query": structured_response.search_query
+                })
+            except Exception as parse_error:
+                logging.error(f"Error parsing file analysis response: {parse_error}")
+                return jsonify({"error": f"Failed to parse file analysis results: {str(parse_error)}"}), 500
+        else:
+            logging.error("No structured output from file analysis")
+            return jsonify({"error": "No book information found in file"}), 500
+            
+    except Exception as e:
+        # Clean up file if it still exists
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        logging.error(f"File analysis failed: {e}")
+        return jsonify({"error": f"File analysis failed: {str(e)}"}), 500
 
 @app.route('/clear/<query>', methods=['POST'])
 def clear_search(query):
