@@ -248,32 +248,69 @@ def analyze_file():
         # Clean up the temporary file immediately
         os.remove(temp_path)
         
-        # Extract potential book information from content
-        logging.debug(f"Analyzing file content: {content[:200]}...")
-        raw_response = agent_executor.invoke({
-            "query": f"Analyze this text and extract all book information (title, author, year). Find multiple books if present: {content[:3000]}"
-        })
+        # Extract potential book information from content - split into lines and process each
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        logging.debug(f"Analyzing file content with {len(lines)} lines: {content[:200]}...")
         
-        if 'output' in raw_response and raw_response['output']:
+        results = []
+        for i, line in enumerate(lines):
+            if len(line) < 3:  # Skip very short lines
+                continue
+                
             try:
-                structured_response = parser.parse(raw_response['output'])
-                structured_response.search_query = f"File: {filename}"
-                save_to_csv(structured_response)
-                logging.info(f"File analysis completed: {structured_response.title}")
-                return jsonify({
-                    "status": "File analysis completed successfully",
-                    "filename": filename,
-                    "title": structured_response.title,
-                    "author": structured_response.author,
-                    "first_year_published": structured_response.first_year_published,
-                    "search_query": structured_response.search_query
+                logging.debug(f"Processing line {i+1}: {line}")
+                raw_response = agent_executor.invoke({
+                    "query": f"Find information about the book: {line}"
                 })
-            except Exception as parse_error:
-                logging.error(f"Error parsing file analysis response: {parse_error}")
-                return jsonify({"error": f"Failed to parse file analysis results: {str(parse_error)}"}), 500
-        else:
-            logging.error("No structured output from file analysis")
+                
+                if 'output' in raw_response and raw_response['output']:
+                    try:
+                        structured_response = parser.parse(raw_response['output'])
+                        structured_response.search_query = f"File: {filename} - Line {i+1}"
+                        save_to_csv(structured_response)
+                        logging.info(f"File analysis completed for line {i+1}: {structured_response.title}")
+                        results.append({
+                            "title": structured_response.title,
+                            "author": structured_response.author,
+                            "first_year_published": structured_response.first_year_published,
+                            "search_query": structured_response.search_query,
+                            "line_number": i+1,
+                            "original_text": line
+                        })
+                    except Exception as parse_error:
+                        logging.error(f"Error parsing line {i+1}: {parse_error}")
+                        results.append({
+                            "error": f"Failed to parse: {line}",
+                            "search_query": f"File: {filename} - Line {i+1}",
+                            "line_number": i+1,
+                            "original_text": line
+                        })
+                else:
+                    logging.error(f"No structured output for line {i+1}")
+                    results.append({
+                        "error": "No results found",
+                        "search_query": f"File: {filename} - Line {i+1}",
+                        "line_number": i+1,
+                        "original_text": line
+                    })
+            except Exception as e:
+                logging.error(f"Error processing line {i+1}: {e}")
+                results.append({
+                    "error": f"Processing failed: {str(e)}",
+                    "search_query": f"File: {filename} - Line {i+1}",
+                    "line_number": i+1,
+                    "original_text": line
+                })
+        
+        if not results:
             return jsonify({"error": "No book information found in file"}), 500
+            
+        return jsonify({
+            "status": f"File analysis completed successfully - found {len(results)} book(s)",
+            "filename": filename,
+            "results": results,
+            "total_processed": len(results)
+        })
             
     except Exception as e:
         # Clean up file if it still exists

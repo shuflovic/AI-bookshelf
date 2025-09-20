@@ -429,16 +429,46 @@
                 } else {
                     status.innerText = result.status;
                     
-                    // Display single result from file analysis
-                    const resultDiv = document.getElementById('results-container');
-                    resultDiv.innerHTML = `
-                        <div class="book-result">
-                            <h4>📄 From file: ${result.filename}</h4>
-                            <div class="book-info"><strong>Title:</strong> <span>${result.title}</span></div>
-                            <div class="book-info"><strong>Author:</strong> <span>${result.author}</span></div>
-                            <div class="book-info"><strong>First Published:</strong> <span>${result.first_year_published}</span></div>
-                        </div>
-                    `;
+                    // Display multiple results from file analysis
+                    if (result.results && result.results.length > 0) {
+                        let html = `<div style="margin-bottom: 15px; padding: 15px; background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px;">
+                            <h4 style="margin: 0 0 10px; color: #1976d2;">📄 Results from file: ${result.filename}</h4>
+                            <p style="margin: 0; color: #555;">Found ${result.total_processed} book(s) in the uploaded file:</p>
+                        </div>`;
+                        
+                        result.results.forEach((book, index) => {
+                            if (book.error) {
+                                html += `
+                                    <div class="error-result">
+                                        <h4>❌ Line ${book.line_number}: ${book.original_text}</h4>
+                                        <p>${book.error}</p>
+                                    </div>
+                                `;
+                            } else {
+                                html += `
+                                    <div class="book-result">
+                                        <h4>📖 Line ${book.line_number}: ${book.title}</h4>
+                                        <div class="book-info"><strong>Author:</strong> <span>${book.author}</span></div>
+                                        <div class="book-info"><strong>First Published:</strong> <span>${book.first_year_published}</span></div>
+                                        <div class="book-info"><strong>Original Text:</strong> <span style="font-style: italic;">${book.original_text}</span></div>
+                                    </div>
+                                `;
+                            }
+                        });
+                        
+                        document.getElementById('results-container').innerHTML = html;
+                    } else {
+                        // Fallback for single result (backward compatibility)
+                        const resultDiv = document.getElementById('results-container');
+                        resultDiv.innerHTML = `
+                            <div class="book-result">
+                                <h4>📄 From file: ${result.filename}</h4>
+                                <div class="book-info"><strong>Title:</strong> <span>${result.title}</span></div>
+                                <div class="book-info"><strong>Author:</strong> <span>${result.author}</span></div>
+                                <div class="book-info"><strong>First Published:</strong> <span>${result.first_year_published}</span></div>
+                            </div>
+                        `;
+                    }
                     
                     // Reload search history and clear file input
                     loadSearchHistory();
